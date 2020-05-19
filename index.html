@@ -375,9 +375,9 @@ summary {
 <p>In this project, we will be examining the relationship between various passenger attributes, like sex and socioeconomic class, and their likelihood of survival. To do so, we will be going through the data science pipeline, including importing and tidying the data, exploratory data analysis (EDA), and machine learning.</p>
 <p>For this project, we’re interest in the following attributes:</p>
 <ul>
-<li><strong>Sex</strong>: sex of the passenger</li>
-<li><strong>Fare</strong>: The amount payed in fare by passenger for travel</li>
-<li><strong>Class</strong>: socioeconomic class of passenger, 1=lower, 2=middle, 3=upper</li>
+<li><strong>Sex</strong>: Sex of the passenger</li>
+<li><strong>Fare</strong>: Amount payed in fare by passenger for travel</li>
+<li><strong>Class</strong>: Socioeconomic class of passenger, 1=lower, 2=middle, 3=upper</li>
 <li><strong>Age</strong>: Age of passenger</li>
 <li><strong>Family</strong>: Number of passenger’s family members aboard the ship, including children, spouces, siblings, and parents</li>
 </ul>
@@ -1014,7 +1014,8 @@ standardized_df %&gt;% head() %&gt;% knitr::kable()</code></pre>
 <p><strong>CV Method to Model Testing</strong></p>
 <p>Now that we’re ready to train a model, we run into a small problem. If we use all the entity points to “train” a KNN model, what data are we going to use to test its accuracy? In our case, we will be using a method called k-cross validation (CV). In this method, we get a segment of the data after randomly sorting it, and hold that segment out when training the model. Then, we can use the rest of the data to train the model and use the segment to test it. We repeat with all other non-overlapping segments to get an accurate reading. We’ll be doing a 10-CV, meaning 10 segments will be tested. <em>Read more about the CV method in the sources section.</em></p>
 <p>The following method carries out this CV method.</p>
-<pre class="r"><code># Set the RNG seed
+<pre class="r"><code># CV Code provived from &quot;classification&quot; project at https://www.hcbravo.org/IntroDataSci/projects/
+# Set the RNG seed
 set.seed(1234)
 
 # create the cross-validation partition
