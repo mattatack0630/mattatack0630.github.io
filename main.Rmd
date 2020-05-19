@@ -1,0 +1,306 @@
+---
+title: "Final Project"
+author: "Matthew McCloskey"
+date: "5/13/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Introduction
+The Titanic was a British luxury passenger liner that sank on its maiden voyage on April 14–15, 1912. It was sailing from Southampton, England, to New York City when the ship struck an iceberg and began to sink, killing an proximate 1,500 people. *To read more about the Titanic's History, see the sources section at the bottom of this page.*
+
+In this project, we will be examining the relationship between various passenger attributes, like sex and socioeconomic class, and their likelihood of survival. To do so, we will be going through the data science pipeline, including importing and tidying the data, exploratory data analysis (EDA), and machine learning.
+
+For this project, we're interest in the following attributes:
+
+* **Sex**: Sex of the passenger
+* **Fare**: Amount payed in fare by passenger for travel
+* **Class**: Socioeconomic class of passenger, 1=lower, 2=middle, 3=upper
+* **Age**: Age of passenger
+* **Family**: Number of passenger's family members aboard the ship, including children, spouses, siblings, and parents
+
+**Project Motivation**
+The motivation behind this project is to see if attributes, in particular sex and class, will give some passengers an advantage to survival over others. We also would like to see if a simple machine learning model like K-nearest-neighbors will be able to successful predict a passengers survival based on these attributes.
+
+## 2. Getting the Data 
+#### **Required Libraries**
+``` {r libLoad, message=FALSE, warning=FALSE}
+# import libraries
+library(tidyverse)
+library(ggplot2)
+library(caret)
+```
+
+#### **Import the Data**
+We'll start by importing the data set we're going to use. This data set can be found at https://www.kaggle.com/c/titanic/data in as a CSV file.
+
+``` {r loadData, message=FALSE, warning=FALSE}
+#import titanic data from csv file
+train <- read.csv("~/UMD/CMSC_320/Final_Project/train.csv")
+train %>% head() %>% knitr::kable()
+```
+
+#### **Tidying the Data**
+At the moment, this data has a number of errors, unnecessary attributes, confusing variable types, etc. We'll start by cleaning it up a bit, so that it is more usable for analysis and machine learning.
+
+**Family Data**
+
+We've decided to combine parent/children and siblings/spouse colons into a single "family" column. This way, we will know the number of family members that each passenger had on board the titanic. We predict that higher family counts will result in a less likely chance of survival, due to the added strain of locating separated family members during the Titanic's sinking.  
+``` {r sumFamily, message=FALSE, warning=FALSE}
+train <- mutate(train, Family=Parch+SibSp)
+train %>% head() %>% knitr::kable()
+```
+
+**Remove Unnecessary Columns**
+
+Not all features will have a significant impact on the survival rate of the passenger. The passenger's Name, for example, should not be considered when predicting the survival rate of a specific passenger, as we expect it to have little to no impact on survival. We'll also get rid of the PassengerID value in this data set, as we won't need it for prediction. 
+``` {r removeUneededCol, message=FALSE, warning=FALSE}
+train <- select(train, Sex, Pclass, Age, Family, Fare, Survived)
+train %>% head() %>% knitr::kable()
+```
+
+**Rounded Age**
+
+The data source that we got this set from uses a unique system of counting age. Any passenger under the age of 1 is counted as a decimal number from 0-1, whereas every other passenger's age is rounded to the nearest year. Because we are interested in keeping a consistent age counting method in place, we'll round all ages less than 0 to the nearest year.
+``` {r roundAge, message=FALSE, warning=FALSE}
+train <- mutate(train, Age=round(Age))
+train %>% head() %>% knitr::kable()
+```
+
+**Survived Category**
+
+To make it more clear that survived is a categorical attribute, we'll be replacing all 1/0 with True or False values.
+``` {r makeSurivedCategorical, message=FALSE, warning=FALSE}
+train <- train %>% mutate(Survived = ifelse(Survived == 1, "True", "False"))
+train %>% head() %>% knitr::kable()
+```
+
+**Remove NA values**
+
+Some entities within this data set do not have values for some variables like Age. The data could ave gone missing or was not collected for this passenger. Regardless, we'll drop any entity with missing data. 
+``` {r cleanNaEntities, message=FALSE, warning=FALSE}
+train <- drop_na(train)
+train %>% head() %>% knitr::kable()
+```
+
+## 3. Exploratory Data Analysis (EDA)
+Below, we'll explore each features relation to the overall survival rate of a passenger. To do so, we'll use stacked bar graphs were we can see survival to death rates among different populations, like female or upper class passengers.
+
+**Among Sexes**
+
+``` {r survivalDistSex, message=FALSE, warning=FALSE}
+counts <- table(train$Survived, train$Sex)
+
+barplot(counts, 
+        main="Survival Among Men and Women",
+        xlab="Sex", col=c("red","darkblue"),
+        legend = c("Died", "Survived")) 
+```
+
+**Among Age Groups**
+
+``` {r survivalDistAge, message=FALSE, warning=FALSE}
+
+counts <- table(train$Survived, cut(train$Age, 20))
+
+barplot(counts, 
+        main="Survival Among Age Groups",
+        col=c("red","darkblue"),
+        legend = c("Died", "Survived")) 
+
+```
+
+**Among Fare Payment Amounts**
+
+``` {r survivalDist, message=FALSE, warning=FALSE}
+
+counts <- table(train$Survived, cut(train$Fare, 20))
+
+barplot(counts, 
+        main="Survival Among Fare Payed",
+        col=c("red","darkblue"),
+        legend = c("Died", "Survived")) 
+
+```
+
+**Among Socioeconomic Classes**
+
+``` {r survivalDistClass, message=FALSE, warning=FALSE}
+
+counts <- table(train$Survived, train$Pclass)
+
+barplot(counts, 
+        main="Survival Among Socioeconomic Status Class",
+        col=c("red","darkblue"),
+        names.arg = c("Upper","Middle","Lower"),
+        legend = c("Died", "Survived")) 
+
+```
+
+**Among Number of Family Members Aboard**
+
+``` {r survivalDistFamily, message=FALSE, warning=FALSE}
+
+counts <- table(train$Survived, train$Family)
+
+barplot(counts, 
+        main="Survival Based on How Many Family Members Aboard",
+        col=c("red","darkblue"),
+        legend = c("Died", "Survived")) 
+```
+
+## 4. Machine Learning Predictions
+We can see that certain values like sex, age, and class seem to have a pretty strong affect on the survival rate of a passenger. Females survive significant more often than male, higher socioeconomic class indicates a higher survival rate, etc. Now, we want to see if we can put all of those values together to train a machine learning model. For this specific situation, we will use a simple K-Nearest-Neighbor's (KNN) model. In this model, we classify an entity based on which entities it is closest to in euclidean space, so an entity is matched with other entities that are similar to it. *Read more about the KNN model in the sources section.*
+
+**Standardize Values**
+
+In order to ensure that all data is on a even scale, we will be standardizing each attribute so that they are center around 0 with a standard deviation around 1. We use the "scale" function to do this in R. We'll also make the Sex attribute numeric, to more easily use it in the KNN algorithm. 
+``` {r standardizeValues, message=FALSE, warning=FALSE}
+# Make Sex attribute numeric M=1, F=0
+standardized_df <- train %>% mutate_at(c("Sex"), ~(as.numeric(factor(.))-1))
+# Standarize the attributes
+standardized_df <- standardized_df %>% mutate_at(c("Sex", "Pclass", "Family", "Fare", "Age"), ~(scale(.) %>% as.vector))
+standardized_df %>% head() %>% knitr::kable()
+```
+
+**CV Method to Model Testing**
+
+Now that we're ready to train a model, we run into a small problem. If we use all the entity points to "train" a KNN model, what data are we going to use to test its accuracy? In our case, we will be using a method called k-cross validation (CV). In this method, we get a segment of the data after randomly sorting it, and hold that segment out when training the model. Then, we can use the rest of the data to train the model and use the segment to test it. We repeat with all other non-overlapping segments to get an accurate reading. We'll be doing a 10-CV, meaning 10 segments will be tested. *Read more about the CV method in the sources section.*
+
+The following method carries out this CV method.
+``` {r message=FALSE, warning=FALSE}
+# CV Code provived from "classification" project at https://www.hcbravo.org/IntroDataSci/projects/
+# Set the RNG seed
+set.seed(1234)
+
+# create the cross-validation partition
+cv_partition <- createFolds(standardized_df$Survived, k=10)
+
+# setup training parameters
+fit_control <- trainControl( ## 10-fold CV
+  method = "cv",
+  number = 10,
+  #indexOut = cv_partition,
+  summaryFunction=twoClassSummary,
+  classProbs=TRUE,
+  savePredictions=TRUE)
+
+
+# a function to obtain performance data
+# (tpr and fpr) over the given cross validation
+# partitions, for the number of trees in the
+# random forest
+get_roc_data <- function(cv_partition) {
+  mean_fpr <- seq(0, 1, len=100)
+  aucs <- numeric(length(cv_partition))
+  
+  # iterate over folds
+  res <- lapply(seq_along(cv_partition),  function(i) {
+    
+    # train the model 
+    fit <- train(Survived~.,
+                        data = standardized_df[-cv_partition[[i]],], # all but the holdout set
+                        method = "knn", # Use KNN model
+                        trControl = fit_control,
+                        metric="ROC")
+
+    # make predictions on the holdout set
+    preds <- predict(fit, newdata=standardized_df[cv_partition[[i]],],type="prob")$True
+    
+    # compute tpr and fpr from the hold out set
+    perf <- ROCR::prediction(preds, standardized_df$Survived[cv_partition[[i]]]) %>%
+      ROCR::performance(measure="tpr", x.measure="fpr")
+
+    fpr <- unlist(perf@x.values)
+    tpr <- unlist(perf@y.values)
+    
+    # interpolate the roc curve over 0, 1 range
+    interp_tpr <- approxfun(fpr, tpr)(mean_fpr)
+    interp_tpr[1] <- 0.0
+    
+    # collect values for this fold
+    data_frame(fold=rep(i, length(mean_fpr)), fpr=mean_fpr, tpr=interp_tpr)
+  })
+  
+  # combine values across all folds
+  # into a single data frame
+  res
+  do.call(rbind, res)
+}
+
+# calculate area under the ROC curve
+# from tpr and fpr values across folds
+compute_auc <- function(curve_df) {
+  curve_df %>% 
+    group_by(fold) %>%
+    summarize(auc=pracma::trapz(fpr, tpr))
+}
+
+```
+
+Now, we can call that method to get the reading on our data. 
+``` {r getRocData, message=FALSE, warning=FALSE}
+knn_curve_df <- get_roc_data(cv_partition)
+knn_auc_df <- compute_auc(knn_curve_df)
+```
+
+**Area Under Curve**
+
+Without getting to much into detail, the CV method will return the resulting "Area Under the Curve" for each segment tested. "The curve" shows the relationship between false-positive predictions and true-positive predictions. Since we want true positives to occur as often as possible, with low false-positive rates, values closer to 1 are better. *Read more about the AUC, and ROC in the sources section.*
+``` {r plotAUCValues, message=FALSE, warning=FALSE}
+# plot distribution of 
+ggplot(knn_auc_df, aes(x=0.10, y=auc)) +
+  geom_jitter(position=position_jitter(0.1), color="blue") +
+  labs(title="AUC comparison",
+       x="CV Segment",
+       y="Area under ROC curve")
+```
+
+**ROC Curves**
+
+The following are the actual ROC curves described above, after averaging each of the segment tests together. Again, we're looking for high true-positive rates at low false-positive rates. Our model shows a fairly decent accuracy, with a true-positive rate of around 75% at a fairly low false-positive rate of only 15%
+``` {r plotROC, message=FALSE, warning=FALSE}
+knn_curve_df %>%
+  group_by(fpr) %>%
+  summarize(tpr = mean(tpr)) %>%
+  ggplot(aes(x=fpr, y=tpr)) +
+    geom_line(size=1, color="blue") +
+    labs(title = "ROC curves",
+         x = "False positive rate",
+         y = "True positive rate")
+```
+
+## 5. Conclusion
+
+**Sex and Survival Rate**
+
+From the survival based on sex chart given in section 3, we can see that females on the Titanic had a much greater survival rate among them than males. We can find the the survival percentage by dividing the number of survived passengers by the total in each population. Men had a survival rate of 18%, while women had a rate of 74%. In fact, 124 more women survived the Titanic sinking than men, even though there were much less women aboard the ship.  
+
+**Socioeconomic Class and Survival Rate**
+
+From the survival based on class chart given in section 3, we can see also see that people from higher socioeconomic classes survived at higher rates than those from lower classes. Poor/Lower class passengers had a survival rate of only 24%, while those from the middle class had a rate of 47%, and those from the rich/high class had an even higher rate of 62%.
+
+**KNN results**
+
+In section 4, we found that it was possible to predict with decent accuracy the survival rate of a passenger given the attributes
+
+* Sex
+* Fare
+* Class
+* Age
+* Family
+
+We found that using a simple KNN model, we could achieve a true-positive rate of 75%, with a false-positive rate of only 15%. The slight inaccuracy in this model could simply be attributed to the random and chaotic nature of a sinking ship. 
+
+As it turns out, the 1997 movie *Titanic* was **surprising** accurate.
+
+## 6. Sources
+
+* KNN: https://towardsdatascience.com/machine-learning-basics-with-the-k-nearest-neighbors-algorithm-6a6e71d01761
+* CV method: http://www.sthda.com/english/articles/38-regression-model-validation/157-cross-validation-essentials-in-r/
+* ROC and AUC: https://towardsdatascience.com/understanding-auc-roc-curve-68b2303cc9c5
+* Titanic (About): https://www.britannica.com/topic/Titanic
+* Titanic Data set: https://www.kaggle.com/c/titanic/data
